@@ -1,0 +1,11 @@
+groups:
+  - name: NginxAlerts
+    rules:
+      - alert: NginxDown
+        expr: nginx_up == 0
+        for: 5s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Nginx Web Application is DOWN on Bastion!"
+          description: "Prometheus has detected that Nginx exporter is reporting service is down."

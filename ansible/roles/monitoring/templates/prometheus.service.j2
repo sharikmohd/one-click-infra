@@ -1,0 +1,20 @@
+[Unit]
+Description=Prometheus
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=prometheus
+Group=prometheus
+Type=simple
+ExecStart=/usr/local/bin/prometheus \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --storage.tsdb.path=/mnt/efs/prometheus/{{ ansible_hostname }} \
+  --storage.tsdb.retention.time=15d \
+  --web.enable-lifecycle \
+  --web.enable-admin-api
+
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

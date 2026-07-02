@@ -1,0 +1,29 @@
+global:
+  resolve_timeout: 1m
+
+route:
+  group_by: ['alertname']
+  # How long to wait before sending a notification initially (allows grouping)
+  group_wait: 5s
+  # How long to wait before sending a notification about new alerts for an existing group
+  group_interval: 5s
+  # How long to wait before repeating an alert that has already been sent
+  repeat_interval: 1m
+  receiver: 'slack-notifications'
+
+receivers:
+  - name: 'slack-notifications'
+    slack_configs:
+      - api_url: "${SLACK_WEBHOOK_URL}" 
+        channel: '#new-channel'                
+        send_resolved: true
+        title: '{% raw %}[{{ .Status | toUpper }}] Monitoring Notification{% endraw %}'
+        text: >-
+          {% raw %}
+          {{ range .Alerts }}
+            *Alert:* {{ .Annotations.summary }}
+            *Severity:* `{{ .Labels.severity }}`
+            *Description:* {{ .Annotations.description }}
+            *Started At:* {{ .StartsAt.Format "15:04:05 MST" }}
+          {{ end }}
+          {% endraw %}

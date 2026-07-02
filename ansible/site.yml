@@ -1,0 +1,6 @@
+---
+- name: Configure Bastion Monitored Host
+  import_playbook: playbooks/bastion.yml
+
+- name: Configure Monitoring Services (Grafana, Prometheus, Loki)
+  import_playbook: playbooks/monitoring.yml

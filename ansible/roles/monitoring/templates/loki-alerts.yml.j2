@@ -1,0 +1,11 @@
+groups:
+  - name: NginxLogAlerts
+    rules:
+      - alert: NginxHighErrorLogs
+        expr: sum(count_over_time({job="nginx"} |~ "404|error" [1m])) > 0
+        for: 5s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Nginx Error/404 Log Detected!"
+          description: "Loki detected Nginx access/error log entries matching '404' or 'error' in the last 1 minute."

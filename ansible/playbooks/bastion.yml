@@ -1,0 +1,6 @@
+---
+- name: Setup and Configure Bastion Monitored Application & Exporters
+  hosts: bastion
+  become: yes
+  roles:
+    - bastion

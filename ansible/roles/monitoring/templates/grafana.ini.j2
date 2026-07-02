@@ -1,0 +1,25 @@
+[paths]
+# Shared directories on the EFS mount
+data = /mnt/efs/grafana/{{ ansible_hostname }}/data
+plugins = /mnt/efs/grafana/{{ ansible_hostname }}/plugins
+provisioning = /etc/grafana/provisioning
+logs = /var/log/grafana
+
+[database]
+# Direct the SQLite database to EFS to share dashboard and user configs across nodes
+type = sqlite3
+path = /mnt/efs/grafana/{{ ansible_hostname }}/data/grafana.db
+
+[server]
+# Protocol and port settings
+protocol = http
+http_port = 3000
+
+[security]
+# Default admin credentials
+admin_user = admin
+admin_password = admin
+
+[analytics]
+reporting_enabled = false
+check_for_updates = true

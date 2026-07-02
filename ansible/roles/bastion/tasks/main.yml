@@ -1,0 +1,248 @@
+---
+- name: Install Nginx Web Application
+  dnf:
+    name: nginx
+    state: present
+    update_cache: yes
+
+- name: Install Rsyslog for system logs
+  dnf:
+    name: rsyslog
+    state: present
+
+- name: Start and Enable Rsyslog
+  systemd:
+    name: rsyslog
+    state: started
+    enabled: yes
+
+- name: Configure Nginx Stub Status Page
+  copy:
+    content: |
+      server {
+          listen 127.0.0.1:80;
+          server_name localhost;
+          location /nginx_status {
+              stub_status on;
+              allow 127.0.0.1;
+              deny all;
+          }
+      }
+    dest: /etc/nginx/conf.d/status.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart Nginx
+
+- name: Start and Enable Nginx Service
+  systemd:
+    name: nginx
+    state: started
+    enabled: yes
+
+- name: Ensure Nginx log directory has group read/execute permissions
+  file:
+    path: /var/log/nginx
+    state: directory
+    mode: '0750'
+    owner: nginx
+    group: nginx
+
+# NODE EXPORTER INSTALLATION
+- name: Create prometheus system group
+  group:
+    name: prometheus
+    system: yes
+    state: present
+
+- name: Create prometheus system user
+  user:
+    name: prometheus
+    group: prometheus
+    system: yes
+    shell: /sbin/nologin
+    create_home: no
+    state: present
+
+- name: Download Node Exporter binary
+  get_url:
+    url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+    dest: "/tmp/node_exporter.tar.gz"
+
+- name: Extract Node Exporter binary
+  unarchive:
+    src: "/tmp/node_exporter.tar.gz"
+    dest: "/tmp"
+    remote_src: yes
+
+- name: Copy Node Exporter binary to destination
+  copy:
+    src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
+    dest: "/usr/local/bin/node_exporter"
+    owner: prometheus
+    group: prometheus
+    mode: '0755'
+    remote_src: yes
+
+- name: Create Node Exporter systemd unit file
+  copy:
+    content: |
+      [Unit]
+      Description=Node Exporter
+      Wants=network-online.target
+      After=network-online.target
+
+      [Service]
+      User=prometheus
+      Group=prometheus
+      Type=simple
+      ExecStart=/usr/local/bin/node_exporter
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/node_exporter.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload Systemd
+
+- name: Start and Enable Node Exporter
+  systemd:
+    name: node_exporter
+    state: started
+    enabled: yes
+
+# NGINX PROMETHEUS EXPORTER INSTALLATION
+- name: Download Nginx Prometheus Exporter binary
+  get_url:
+    url: "https://github.com/nginxinc/nginx-prometheus-exporter/releases/download/v{{ nginx_exporter_version }}/nginx-prometheus-exporter_{{ nginx_exporter_version }}_linux_amd64.tar.gz"
+    dest: "/tmp/nginx_exporter.tar.gz"
+
+- name: Extract Nginx Prometheus Exporter binary
+  unarchive:
+    src: "/tmp/nginx_exporter.tar.gz"
+    dest: "/tmp"
+    remote_src: yes
+
+- name: Copy Nginx Prometheus Exporter binary to destination
+  copy:
+    src: "/tmp/nginx-prometheus-exporter"
+    dest: "/usr/local/bin/nginx-prometheus-exporter"
+    owner: prometheus
+    group: prometheus
+    mode: '0755'
+    remote_src: yes
+
+- name: Create Nginx Prometheus Exporter systemd unit file
+  copy:
+    content: |
+      [Unit]
+      Description=Nginx Prometheus Exporter
+      Wants=network-online.target
+      After=network-online.target nginx.service
+
+      [Service]
+      User=prometheus
+      Group=prometheus
+      Type=simple
+      ExecStart=/usr/local/bin/nginx-prometheus-exporter -nginx.scrape-uri=http://127.0.0.1:80/nginx_status
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/nginx_exporter.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload Systemd
+
+- name: Start and Enable Nginx Exporter
+  systemd:
+    name: nginx_exporter
+    state: started
+    enabled: yes
+
+# PROMTAIL LOG COLLECTOR INSTALLATION
+- name: Create promtail system group
+  group:
+    name: promtail
+    system: yes
+    state: present
+
+- name: Create promtail system user
+  user:
+    name: promtail
+    group: promtail
+    system: yes
+    shell: /sbin/nologin
+    create_home: no
+    state: present
+
+# Add promtail to nginx group to read nginx logs
+- name: Add promtail user to nginx group
+  user:
+    name: promtail
+    groups: nginx
+    append: yes
+
+- name: Download Promtail binary
+  get_url:
+    url: "https://github.com/grafana/loki/releases/download/v{{ promtail_version }}/promtail-linux-amd64.zip"
+    dest: "/tmp/promtail.zip"
+
+- name: Install unzip package
+  dnf:
+    name: unzip
+    state: present
+
+- name: Extract Promtail binary
+  unarchive:
+    src: "/tmp/promtail.zip"
+    dest: "/usr/local/bin"
+    remote_src: yes
+    owner: promtail
+    group: promtail
+    mode: '0755'
+
+- name: Rename Promtail binary
+  command: mv /usr/local/bin/promtail-linux-amd64 /usr/local/bin/promtail
+  args:
+    creates: /usr/local/bin/promtail
+
+- name: Fix Promtail binary permissions
+  file:
+    path: /usr/local/bin/promtail
+    owner: promtail
+    group: promtail
+    mode: '0755'
+
+- name: Create Promtail configuration directory
+  file:
+    path: /etc/promtail
+    state: directory
+    owner: promtail
+    group: promtail
+    mode: '0755'
+
+- name: Template Promtail configuration file
+  template:
+    src: promtail.yml.j2
+    dest: /etc/promtail/config.yml
+    owner: promtail
+    group: promtail
+    mode: '0644'
+  notify: Restart Promtail
+
+- name: Template Promtail systemd service file
+  template:
+    src: promtail.service.j2
+    dest: /etc/systemd/system/promtail.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload Systemd
+
+- name: Start and Enable Promtail
+  systemd:
+    name: promtail
+    state: started
+    enabled: yes
